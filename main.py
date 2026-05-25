@@ -16,7 +16,6 @@ logger = logging.getLogger(__name__)
 TELEGRAM_TOKEN   = os.environ.get("TELEGRAM_TOKEN", "")
 TELEGRAM_CHAT_ID = os.environ.get("TELEGRAM_CHAT_ID", "")
 WEBHOOK_SECRET   = os.environ.get("WEBHOOK_SECRET", "")
-PRICE_BAND_PCT   = float(os.environ.get("PRICE_BAND_PCT", "1.0"))
 
 def format_price(price: float) -> str:
     if price >= 1000:
@@ -29,7 +28,6 @@ def format_price(price: float) -> str:
 def format_alert(data: dict) -> str:
     asset    = data.get("asset",    "Desconocido")
     interval = data.get("interval", "N/A")
-    strategy = data.get("strategy", "Sin estrategia")
     action   = str(data.get("action", "INFO")).upper().strip()
     message  = data.get("message",  "")
     timestamp = datetime.utcnow().strftime("%d/%m/%Y %H:%M UTC")
@@ -39,50 +37,79 @@ def format_alert(data: dict) -> str:
     except (ValueError, TypeError):
         price = 0.0
 
-    band_low  = price * (1 - PRICE_BAND_PCT / 100)
-    band_high = price * (1 + PRICE_BAND_PCT / 100)
+    bajo_15 = price * (1 - 1.5 / 100)
+    sube_05 = price * (1 + 0.5 / 100)
+    bajo_05 = price * (1 - 0.5 / 100)
+    sube_15 = price * (1 + 1.5 / 100)
 
     if action == "ABRIR LARGO":
         emoji      = "🟢"
         accion_txt = "ABRIR LARGO"
-        banda_txt  = f"📊 Zona de entrada: {format_price(band_low)} — {format_price(price)}"
-        banda_nota = f"(precio señal o hasta {PRICE_BAND_PCT}% por debajo)"
+        precio_lbl = f"💰 Precio de entrada: {format_price(price)}"
+        banda_txt  = f"📊 Zona de entrada:   {format_price(bajo_15)} — {format_price(sube_05)}"
+        nota = (
+            "💡 Si llegás tarde o no pudiste entrar al precio exacto,\n"
+            "    podés hacerlo dentro de esta zona. Cuanto más cerca\n"
+            "    del precio señal o por debajo, mejor posicionado quedás."
+        )
+
     elif action == "CERRAR LARGO":
         emoji      = "🔵"
         accion_txt = "CERRAR LARGO"
-        banda_txt  = f"📊 Zona de cierre: {format_price(price)} — {format_price(band_high)}"
-        banda_nota = f"(precio señal o hasta {PRICE_BAND_PCT}% por encima)"
+        precio_lbl = f"💰 Precio de salida:  {format_price(price)}"
+        banda_txt  = f"📊 Zona de salida:    {format_price(bajo_05)} — {format_price(sube_15)}"
+        nota = (
+            "💡 Si no pudiste cerrar al precio exacto, esta zona sigue\n"
+            "    siendo válida para salir. Cerrar más arriba es incluso\n"
+            "    mejor resultado para la operación."
+        )
+
     elif action == "ABRIR CORTO":
         emoji      = "🔴"
         accion_txt = "ABRIR CORTO"
-        banda_txt  = f"📊 Zona de entrada: {format_price(price)} — {format_price(band_high)}"
-        banda_nota = f"(precio señal o hasta {PRICE_BAND_PCT}% por encima)"
+        precio_lbl = f"💰 Precio de entrada: {format_price(price)}"
+        banda_txt  = f"📊 Zona de entrada:   {format_price(bajo_05)} — {format_price(sube_15)}"
+        nota = (
+            "💡 Si llegás tarde o no pudiste entrar al precio exacto,\n"
+            "    podés hacerlo dentro de esta zona. Cuanto más cerca\n"
+            "    del precio señal o por encima, mejor posicionado quedás."
+        )
+
     elif action == "CERRAR CORTO":
         emoji      = "⚪"
         accion_txt = "CERRAR CORTO"
-        banda_txt  = f"📊 Zona de cierre: {format_price(band_low)} — {format_price(price)}"
-        banda_nota = f"(precio señal o hasta {PRICE_BAND_PCT}% por debajo)"
+        precio_lbl = f"💰 Precio de salida:  {format_price(price)}"
+        banda_txt  = f"📊 Zona de salida:    {format_price(bajo_15)} — {format_price(sube_05)}"
+        nota = (
+            "💡 Si no pudiste cerrar al precio exacto, esta zona sigue\n"
+            "    siendo válida para salir. Cerrar más abajo es incluso\n"
+            "    mejor resultado para la operación."
+        )
+
     else:
         emoji      = "ℹ️"
         accion_txt = action
-        banda_txt  = f"📊 Rango ref.: {format_price(band_low)} — {format_price(band_high)}"
-        banda_nota = ""
+        precio_lbl = f"💰 Precio señal: {format_price(price)}"
+        banda_txt  = ""
+        nota       = ""
 
     lines = [
         f"{emoji} {accion_txt}",
-        f"━━━━━━━━━━━━━━━━━━━━",
-        f"💎 Activo:     {asset}",
-        f"⏱ Intervalo:  {interval}",
-        f"━━━━━━━━━━━━━━━━━━━━",
-        f"💰 Precio señal: {format_price(price)}",
+        "━━━━━━━━━━━━━━━━━━━━",
+        f"💎 Activo:    {asset}",
+        f"⏱ Intervalo: {interval}",
+        "━━━━━━━━━━━━━━━━━━━━",
+        precio_lbl,
         banda_txt,
-        banda_nota,
+        "━━━━━━━━━━━━━━━━━━━━",
+        nota,
         f"🕐 {timestamp}",
     ]
 
     if message:
         lines.insert(-1, f"📝 {message}")
 
+    lines = [l for l in lines if l.strip()]
     return "\n".join(lines)
 
 
@@ -127,13 +154,10 @@ def webhook():
         return jsonify({"error": str(e)}), 500
 
 
-# ── Endpoints de test individuales ────────────────────────────────────────────
-
 def _test(action: str):
     sample = {
         "asset":    "BTCUSDT",
         "interval": "4h",
-        "strategy": "Breakout Compresion v1",
         "action":   action,
         "price":    65000.50,
     }
