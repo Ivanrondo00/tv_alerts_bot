@@ -30,7 +30,9 @@ def format_alert(data: dict) -> str:
     interval = data.get("interval", "N/A")
     action   = str(data.get("action", "INFO")).upper().strip()
     message  = data.get("message",  "")
-    timestamp = datetime.utcnow().strftime("%d/%m/%Y %H:%M UTC")
+    from datetime import timezone, timedelta
+    ar_tz = timezone(timedelta(hours=-3))
+    timestamp = datetime.now(ar_tz).strftime("%d/%m/%Y %H:%M (UTC-3)")
 
     try:
         price = float(data.get("price", 0))
