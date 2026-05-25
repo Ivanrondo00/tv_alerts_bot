@@ -73,7 +73,6 @@ def format_alert(data: dict) -> str:
         f"━━━━━━━━━━━━━━━━━━━━",
         f"💎 Activo:     {asset}",
         f"⏱ Intervalo:  {interval}",
-        f"🧠 Estrategia: {strategy}",
         f"━━━━━━━━━━━━━━━━━━━━",
         f"💰 Precio señal: {format_price(price)}",
         banda_txt,
