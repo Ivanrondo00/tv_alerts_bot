@@ -17,6 +17,12 @@ TELEGRAM_TOKEN   = os.environ.get("TELEGRAM_TOKEN", "")
 TELEGRAM_CHAT_ID = os.environ.get("TELEGRAM_CHAT_ID", "")
 WEBHOOK_SECRET   = os.environ.get("WEBHOOK_SECRET", "")
 
+STRATEGY_MAP = {
+    "sf_rnd_0146":   {"nombre": "Long Principal",      "size": 2000},
+    "R2-F23-0202":   {"nombre": "Long Complementaria", "size": 2100},
+    "Familia_03":    {"nombre": "Short Cobertura",     "size": 1800},
+}
+
 def format_price(price: float) -> str:
     if price >= 1000:
         return f"{price:,.2f}"
@@ -30,6 +36,12 @@ def format_alert(data: dict) -> str:
     interval = data.get("interval", "N/A")
     action   = str(data.get("action", "INFO")).upper().strip()
     message  = data.get("message",  "")
+    strategy_key = data.get("strategy", "")
+
+    strategy_info = STRATEGY_MAP.get(strategy_key, None)
+    estrategia_txt = strategy_info["nombre"] if strategy_info else strategy_key if strategy_key else None
+    size_txt = f"${strategy_info['size']:,} USDT" if strategy_info else None
+
     from datetime import timezone, timedelta
     ar_tz = timezone(timedelta(hours=-3))
     timestamp = datetime.now(ar_tz).strftime("%d/%m/%Y %H:%M (UTC-3)")
@@ -51,6 +63,9 @@ def format_alert(data: dict) -> str:
             f"💰 Precio de entrada: {format_price(price)}",
             f"📊 Zona de entrada:   {format_price(bajo_15)} — {format_price(sube_05)}",
             "━━━━━━━━━━━━━━━━━━━━",
+            f"💵 Size base: {size_txt}" if size_txt else "",
+            "📌 Ver mensaje fijado para más información.",
+            "━━━━━━━━━━━━━━━━━━━━",
             "💡 Podés entrar dentro de esta zona si llegás tarde, siempre que la operación no se haya cerrado.",
         ]
 
@@ -68,6 +83,9 @@ def format_alert(data: dict) -> str:
             f"💰 Precio de entrada: {format_price(price)}",
             f"📊 Zona de entrada:   {format_price(bajo_05)} — {format_price(sube_15)}",
             "━━━━━━━━━━━━━━━━━━━━",
+            f"💵 Size base: {size_txt}" if size_txt else "",
+            "📌 Ver mensaje fijado para más información.",
+            "━━━━━━━━━━━━━━━━━━━━",
             "💡 Podés entrar dentro de esta zona si llegás tarde, siempre que la operación no se haya cerrado.",
         ]
 
@@ -83,14 +101,19 @@ def format_alert(data: dict) -> str:
         accion_txt = action
         cuerpo = [f"💰 Precio: {format_price(price)}"]
 
+    # Bloque de cabecera con estrategia opcional
+    cabecera = [
+        f"{emoji} {accion_txt}",
+        "━━━━━━━━━━━━━━━━━━━━",
+        f"💎 Activo:     {asset}",
+        f"⏱ Intervalo:  {interval}",
+    ]
+    if estrategia_txt:
+        cabecera.append(f"📈 Estrategia: {estrategia_txt}")
+    cabecera.append("━━━━━━━━━━━━━━━━━━━━")
+
     lines = (
-        [
-            f"{emoji} {accion_txt}",
-            "━━━━━━━━━━━━━━━━━━━━",
-            f"💎 Activo:    {asset}",
-            f"⏱ Intervalo: {interval}",
-            "━━━━━━━━━━━━━━━━━━━━",
-        ]
+        cabecera
         + cuerpo
         + ([f"📝 {message}"] if message else [])
         + [f"🕐 {timestamp}"]
@@ -133,8 +156,14 @@ def webhook():
         return jsonify({"error": str(e)}), 500
 
 
-def _test(action: str):
-    sample = {"asset": "BTCUSDT", "interval": "4h", "action": action, "price": 65000.50}
+def _test(action: str, strategy: str = ""):
+    sample = {
+        "asset": "BTCUSDT",
+        "interval": "4h",
+        "action": action,
+        "price": 65000.50,
+        "strategy": strategy,
+    }
     try:
         text   = format_alert(sample)
         result = send_telegram_message(text)
@@ -143,16 +172,16 @@ def _test(action: str):
         return jsonify({"error": str(e)}), 500
 
 @app.route("/test/al", methods=["GET"])
-def test_al(): return _test("ABRIR LARGO")
+def test_al(): return _test("ABRIR LARGO", "sf_rnd_0146")
 
 @app.route("/test/cl", methods=["GET"])
-def test_cl(): return _test("CERRAR LARGO")
+def test_cl(): return _test("CERRAR LARGO", "sf_rnd_0146")
 
 @app.route("/test/ac", methods=["GET"])
-def test_ac(): return _test("ABRIR CORTO")
+def test_ac(): return _test("ABRIR CORTO", "Familia_03")
 
 @app.route("/test/cc", methods=["GET"])
-def test_cc(): return _test("CERRAR CORTO")
+def test_cc(): return _test("CERRAR CORTO", "Familia_03")
 
 
 if __name__ == "__main__":
